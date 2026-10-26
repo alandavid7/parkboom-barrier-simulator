@@ -16,6 +16,8 @@ import { BarrierStateMachine, type Spec, type StepResult } from './stateMachine.
 
 export const TRAVEL_MS = 2500;
 export const NOBODY_TIMEOUT_MS = 5 * 60 * 1000;
+/** A post that sits part-way for this long raises one alert. The cloud decides how to escalate. */
+export const STOPPED_TIMEOUT_MS = 2 * 60 * 1000;
 export const CHALLENGE_TTL_MS = 30 * 1000;
 export const MAX_REMOTE_TTL_S = 30;
 
@@ -49,6 +51,7 @@ export class Barrier {
   private seq = 0;
   private motion: { remainingMs: number } | null = null;
   private nobodyTimer: { remainingMs: number } | null = null;
+  private stoppedTimer: { remainingMs: number } | null = null;
   private signing: Promise<unknown> = Promise.resolve();
 
   private constructor(private readonly trustAnchor: string, private readonly signer: Signer, s: Spec, id: string) {
@@ -164,6 +167,7 @@ export class Barrier {
     this.powered = false;
     this.motion = null;
     this.nobodyTimer = null;
+    this.stoppedTimer = null;
     this.trusted = null; // refuse time-limited passes until fresh signed time arrives
     this.challenges.clear();
   }
@@ -172,6 +176,8 @@ export class Barrier {
     if (this.powered) return;
     this.powered = true;
     this.log('power', 'Power restored; waiting for signed time');
+    // A post still stuck part-way when power returns is still stuck: start counting again.
+    if (this.sm.state === 'STOPPED') this.stoppedTimer = { remainingMs: STOPPED_TIMEOUT_MS };
   }
 
   /** Advance local time. Drives motion and the nobody-arrived timer. */
@@ -199,6 +205,13 @@ export class Barrier {
           this.after(this.sm.step({ event: 'NOBODY_TIMEOUT', source: 'system' }), 'timer');
         }
       }
+      if (this.stoppedTimer) {
+        this.stoppedTimer.remainingMs -= stepMs;
+        if (this.stoppedTimer.remainingMs <= 0) {
+          this.stoppedTimer = null; // one alert per stop; the cloud escalates
+          this.after(this.sm.step({ event: 'STOPPED_TIMEOUT', source: 'system' }), 'timer');
+        }
+      }
     }
     for (const [n, exp] of this.challenges) if (exp < this.localMs) this.challenges.delete(n);
   }
@@ -221,6 +234,8 @@ export class Barrier {
       if (a === 'motorStop') this.motion = null;
       if (a === 'startNobodyTimer') this.nobodyTimer = { remainingMs: NOBODY_TIMEOUT_MS };
       if (a === 'cancelNobodyTimer') this.nobodyTimer = null;
+      if (a === 'startStoppedTimer') this.stoppedTimer = { remainingMs: STOPPED_TIMEOUT_MS };
+      if (a === 'cancelStoppedTimer') this.stoppedTimer = null;
     }
     const kind = r.accepted ? 'transition' : 'rejected';
     const detail = r.accepted

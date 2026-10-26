@@ -31,6 +31,7 @@
     "CAR_ARRIVES":      "Bay sensor reports occupied",
     "CAR_LEAVES":       "Bay sensor reports empty",
     "NOBODY_TIMEOUT":   "5 minutes after a lower with no car arriving",
+    "STOPPED_TIMEOUT":  "2 minutes in Stopped with no command: the post is stuck part-way",
     "FORCED_DOWN":      "Post pushed down without a command",
     "SENSOR_FAULT":     "Bay sensor self-test failed",
     "MAINT_ON":         "Admin switches maintenance on, on site",
@@ -48,6 +49,9 @@
     "motorStop":        "Stop the motor",
     "motorReverseDown": "Stop within 200 ms and drive down",
     "startNobodyTimer": "Start the 5-minute 'nobody arrived' timer",
+    "startStoppedTimer": "Start the 2-minute 'stuck in Stopped' timer",
+    "cancelStoppedTimer": "Cancel that timer",
+    "emitStuckAlert":   "Event: post is stuck part-way, admin alerted",
     "cancelNobodyTimer":"Cancel that timer",
     "emitReminder":     "Event: still down and nobody has parked",
     "emitTamper":       "Event: forced down without a command",
@@ -59,8 +63,8 @@
     { "from": "UP",            "event": "FORCED_DOWN",    "to": "DOWN_OCCUPIED", "actions": ["emitTamper"] },
 
     { "from": "LOWERING",      "event": "MOTION_DONE",    "to": "DOWN_EMPTY",    "actions": ["startNobodyTimer"] },
-    { "from": "LOWERING",      "event": "OBSTRUCTION",    "to": "STOPPED",       "actions": ["motorStop", "emitObstruction"] },
-    { "from": "LOWERING",      "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop"] },
+    { "from": "LOWERING",      "event": "OBSTRUCTION",    "to": "STOPPED",       "actions": ["motorStop", "emitObstruction", "startStoppedTimer"] },
+    { "from": "LOWERING",      "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop", "startStoppedTimer"] },
     { "from": "LOWERING",      "event": "MOTOR_STALL",    "to": "JAMMED",        "actions": ["motorStop", "emitFault"] },
 
     { "from": "DOWN_EMPTY",    "event": "CAR_ARRIVES",    "to": "DOWN_OCCUPIED", "actions": ["cancelNobodyTimer"] },
@@ -75,16 +79,17 @@
     { "from": "RAISING",       "event": "MOTION_DONE",    "to": "UP",            "actions": [] },
     { "from": "RAISING",       "event": "OBSTRUCTION",    "to": "LOWERING",      "actions": ["motorReverseDown", "emitObstruction"] },
     { "from": "RAISING",       "event": "CAR_ARRIVES",    "to": "LOWERING",      "actions": ["motorReverseDown", "emitObstruction"] },
-    { "from": "RAISING",       "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop"] },
+    { "from": "RAISING",       "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop", "startStoppedTimer"] },
     { "from": "RAISING",       "event": "MOTOR_STALL",    "to": "JAMMED",        "actions": ["motorStop", "emitFault"] },
     { "from": "RAISING",       "event": "SENSOR_FAULT",   "to": "LOWERING",      "actions": ["motorReverseDown", "emitFault"] },
 
-    { "from": "STOPPED",       "event": "CMD_LOWER",      "to": "LOWERING",      "actions": ["motorDown"] },
+    { "from": "STOPPED",       "event": "CMD_LOWER",      "to": "LOWERING",      "actions": ["cancelStoppedTimer", "motorDown"] },
+    { "from": "STOPPED",       "event": "STOPPED_TIMEOUT", "to": "STOPPED",      "actions": ["emitStuckAlert"] },
 
-    { "from": "*",             "event": "SENSOR_FAULT",   "to": "FAULT",         "actions": ["motorStop", "cancelNobodyTimer", "emitFault"] },
-    { "from": "*",             "event": "MAINT_ON",       "to": "MAINTENANCE",   "guards": ["fromPhone"], "actions": ["motorStop", "cancelNobodyTimer"] },
-    { "from": "MAINTENANCE",   "event": "MAINT_OFF",      "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] },
-    { "from": "FAULT",         "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] },
-    { "from": "JAMMED",        "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] }
+    { "from": "*",             "event": "SENSOR_FAULT",   "to": "FAULT",         "actions": ["motorStop", "cancelNobodyTimer", "cancelStoppedTimer", "emitFault"] },
+    { "from": "*",             "event": "MAINT_ON",       "to": "MAINTENANCE",   "guards": ["fromPhone"], "actions": ["motorStop", "cancelNobodyTimer", "cancelStoppedTimer"] },
+    { "from": "MAINTENANCE",   "event": "MAINT_OFF",      "to": "STOPPED",       "guards": ["fromPhone"], "actions": ["startStoppedTimer"] },
+    { "from": "FAULT",         "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": ["startStoppedTimer"] },
+    { "from": "JAMMED",        "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": ["startStoppedTimer"] }
   ]
 }

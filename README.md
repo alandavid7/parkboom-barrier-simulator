@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/alandavid7/parkboom-barrier-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/alandavid7/parkboom-barrier-simulator/actions/workflows/ci.yml)
 
-Park Boom is a phone-operated parking barrier. This repo is its safety rules and security protocol, written as runnable TypeScript and tested before any hardware exists: 49 tests, including property-based checks that the post can never rise over a car.
+Park Boom is a phone-operated parking barrier. This repo is its safety rules and security protocol, written as runnable TypeScript and tested before any hardware exists: 54 tests, including property-based checks that the post can never rise over a car.
 
 ![Demo page: the post is down with a car over it. A raise from the phone and a remote raise are both refused, and every decision is in the signed event log.](docs/demo.png)
 
@@ -21,7 +21,7 @@ Needs Node 22.
 ```
 npm install
 npm run typecheck   # strict TypeScript, no output means clean
-npm test            # 49 tests, about 2 seconds
+npm test            # 54 tests, about 2 seconds
 npm run build       # writes dist/park-boom-simulator.html (one file, opens offline)
 npm run all         # all three
 ```
@@ -46,7 +46,7 @@ Open `dist/park-boom-simulator.html` in a browser to drive it by hand.
 
 - **The rules.** Seven properties checked against 3,000 random event sequences each. The post never starts rising unless the bay reads empty and the sensor is healthy. A raise only starts from a phone on site. Anything detected while rising sends it back down. A refused input never changes state. Nothing drives the motor in Fault, Jammed or Maintenance. Only an accepted on-site clear brings a failed sensor back.
 - **The protocol.** Replayed commands, expired challenges, expired passes, passes for another bay or another organisation, stolen passes on a different phone, tampered commands, revoked phones, the wrong role, replayed or backdated signed time, remote raise, late or duplicated remote commands and forged gateway commands are all refused. A random mix of these attacks never moves the post.
-- **The failure table.** Power cut mid-lower, obstruction while rising, car over the post, faulty sensor, removed driver, late remote lower, forced-down post, nobody parks, no signal, gateway offline.
+- **The failure table.** Power cut mid-lower, obstruction while rising, car over the post, faulty sensor, removed driver, late remote lower, forced-down post, nobody parks, no signal, gateway offline, and a post left stuck part-way (one alert after 2 minutes, none if someone lowers it first).
 
 ## Known gaps
 

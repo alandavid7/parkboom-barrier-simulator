@@ -1,7 +1,7 @@
 // Whole-system scenarios from the PRD failure table (section 7), run on the simulated car park.
 
 import { describe, expect, it } from 'vitest';
-import { NOBODY_TIMEOUT_MS } from '../src/barrier/barrier.js';
+import { NOBODY_TIMEOUT_MS, STOPPED_TIMEOUT_MS } from '../src/barrier/barrier.js';
 import { World } from '../src/sim/world.js';
 
 describe('PRD failure scenarios', () => {
@@ -94,5 +94,61 @@ describe('PRD failure scenarios', () => {
     w.gatewayOnline = true;
     w.advance(5000);
     expect(w.barrier.state).toBe('UP');
+  });
+});
+
+describe('stuck part-way (found in hands-on testing)', () => {
+  const alerts = (w: World) => w.barrier.events.filter((e) => e.payload.detail.includes('emitStuckAlert')).length;
+
+  it('a post left Stopped after a power cut raises one alert, and only one, however long it sits', async () => {
+    const w = await World.create();
+    await w.phoneAction('priya', 'lower');
+    w.advance(1000);
+    w.barrier.powerLoss();
+    w.advance(60_000);
+    w.barrier.powerRestore();
+    w.advance(STOPPED_TIMEOUT_MS - 1000);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(0); // not yet
+    w.advance(2000);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(1);
+    expect(w.barrier.state).toBe('STOPPED'); // the alert changes nothing physical
+    w.advance(72 * 3600 * 1000);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(1);
+  });
+
+  it('an obstruction that leaves the post Stopped raises the alert too', async () => {
+    const w = await World.create();
+    await w.phoneAction('priya', 'lower');
+    w.advance(500);
+    w.barrier.physical('OBSTRUCTION');
+    expect(w.barrier.state).toBe('STOPPED');
+    w.advance(STOPPED_TIMEOUT_MS + 100);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(1);
+  });
+
+  it('no alert if someone lowers it first', async () => {
+    const w = await World.create();
+    await w.phoneAction('priya', 'lower');
+    w.advance(1000);
+    w.barrier.powerLoss(); w.barrier.powerRestore();
+    w.advance(60_000);
+    expect((await w.phoneAction('priya', 'lower')).ok).toBe(true);
+    w.advance(10 * 60_000);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(0);
+  });
+
+  it('an unpowered barrier cannot count: the clock starts again when power returns', async () => {
+    const w = await World.create();
+    await w.phoneAction('priya', 'lower');
+    w.advance(1000);
+    w.barrier.powerLoss();
+    w.advance(10 * 60_000);
+    await w.barrier.flush();
+    expect(alerts(w)).toBe(0);
   });
 });

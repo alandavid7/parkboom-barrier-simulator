@@ -183,3 +183,12 @@ describe('safety properties (random sequences)', () => {
     }), { numRuns: RUNS });
   });
 });
+
+describe('Stopped timer bookkeeping', () => {
+  it('every way into Stopped starts the stuck timer, and every way out cancels it', () => {
+    for (const t of spec.transitions) {
+      if (t.to === 'STOPPED' && t.from !== 'STOPPED') expect(t.actions, `${t.from} ${t.event}`).toContain('startStoppedTimer');
+      if ((t.from === 'STOPPED' || t.from === '*') && t.to !== 'STOPPED') expect(t.actions, `${t.from} ${t.event}`).toContain('cancelStoppedTimer');
+    }
+  });
+});
