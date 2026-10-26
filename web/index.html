@@ -1,0 +1,245 @@
+<meta charset="utf-8">
+<title>Park Boom Barrier Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a test bench. Phone on the left, the bay in the middle, the what-if panel on the right, the signed log across the bottom. */
+:root {
+  --bg: #e7eaec;          /* concrete */
+  --surface: #f6f7f8;
+  --ink: #1b2126;
+  --muted: #5b6670;
+  --line: #c9cfd4;
+  --hazard: #e2a400;      /* bollard yellow */
+  --hazard-ink: #1b2126;
+  --tarmac: #3a4148;
+  --ok: #1d7a4c; --warn: #a86400; --bad: #b3261e; --info: #2a5d8f; --move: #6b4fb3;
+  --display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171a; --surface: #1c2226; --ink: #e6eaed; --muted: #95a1ab; --line: #2f383e;
+  --hazard: #f0b72a; --tarmac: #0c0f11;
+  --ok: #4cc38a; --warn: #e0a040; --bad: #f07169; --info: #78aee6; --move: #a892f0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171a; --surface: #1c2226; --ink: #e6eaed; --muted: #95a1ab; --line: #2f383e;
+  --hazard: #f0b72a; --tarmac: #0c0f11;
+  --ok: #4cc38a; --warn: #e0a040; --bad: #f07169; --info: #78aee6; --move: #a892f0; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px }
+h1 { font: 700 30px/1.05 var(--display); letter-spacing: .01em; margin: 0; text-wrap: balance }
+h1 .tag { display: inline-block; font: 600 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; background: var(--hazard); color: var(--hazard-ink); padding: 5px 7px; margin-left: 8px; vertical-align: middle }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 66ch }
+.chips { display: flex; flex-wrap: wrap; gap: 8px }
+.chip { font: 500 12px/1 var(--mono); padding: 7px 9px; border: 1px solid var(--line); background: var(--surface); display: inline-flex; gap: 6px; align-items: center }
+.chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bad) }
+.chip[data-on="true"]::before { background: var(--ok) }
+
+.bench { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(260px, 330px); gap: 18px; align-items: start }
+@media (max-width: 1000px) { .bench { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) } .bay { grid-column: 1 / -1; order: -1 } }
+@media (max-width: 640px) { .bench { grid-template-columns: minmax(0, 1fr) } }
+.panel { background: var(--surface); border: 1px solid var(--line); padding: 16px; display: grid; gap: 12px; min-width: 0 }
+.eyebrow { font: 600 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 }
+
+/* phone */
+.phone { border-radius: 28px; padding: 18px 16px 20px; border: 1px solid var(--line) }
+.who { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line) }
+.who label { text-align: center; padding: 8px 4px; cursor: pointer; font-weight: 500; font-size: 14px }
+.who input { position: absolute; opacity: 0; pointer-events: none }
+.who label:has(input:checked) { background: var(--ink); color: var(--surface) }
+.who label:has(input:focus-visible) { outline: 2px solid var(--hazard); outline-offset: -2px }
+.pass { font: 12px/1.45 var(--mono); padding: 10px; border: 1px dashed var(--line); overflow-wrap: anywhere }
+.pass[data-tone="bad"] { border-color: var(--bad); color: var(--bad) }
+.pass[data-tone="warn"] { border-color: var(--warn); color: var(--warn) }
+.note { font-size: 12.5px; color: var(--muted); margin: -6px 0 0 }
+.holdwrap { display: grid; justify-items: center; gap: 8px; padding: 8px 0 }
+#hold { --size: 150px; width: var(--size); height: var(--size); border-radius: 50%; border: 0; cursor: pointer; position: relative; background: var(--hazard); color: var(--hazard-ink);
+  font: 700 19px/1.1 var(--display); letter-spacing: .02em; touch-action: none; user-select: none; -webkit-user-select: none; transition: transform .15s }
+#hold.holding { transform: scale(.96) }
+#hold[disabled] { opacity: .45; cursor: progress }
+#hold:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px }
+#ring { --p: 0; position: absolute; inset: -7px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(var(--ink) calc(var(--p) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 0) }
+.hint { font-size: 13px; color: var(--muted); text-align: center; margin: 0; max-width: 28ch }
+.row { display: flex; flex-wrap: wrap; gap: 8px }
+
+/* bay */
+.bay { padding: 0; overflow: hidden }
+.bayhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px 0 }
+.state { font: 700 26px/1 var(--display); letter-spacing: .01em }
+.state[data-tone="ok"] { color: var(--ok) } .state[data-tone="warn"] { color: var(--warn) } .state[data-tone="bad"] { color: var(--bad) }
+.state[data-tone="info"] { color: var(--info) } .state[data-tone="move"] { color: var(--move) }
+.code { font: 500 12px/1 var(--mono); color: var(--muted); border: 1px solid var(--line); padding: 5px 7px }
+#scene { display: block; width: 100%; height: auto; max-width: 100% }
+#scene .sky { fill: var(--surface) }
+#scene .ground { fill: var(--tarmac) }
+#scene .lines { stroke: var(--hazard); stroke-width: 4 }
+#scene .wall { fill: var(--line) }
+#scene .hazard { fill: var(--hazard) } #scene .black { fill: var(--ink) }
+#scene .carbody { fill: var(--info); opacity: .9 } #scene .wheel { fill: var(--ink) } #scene .glass { fill: var(--surface); opacity: .55 }
+#scene .lamp { fill: var(--ok) }
+#scene.off .lamp { fill: var(--muted) } #scene.faulty .lamp { fill: var(--bad) }
+#post { --h: 1; transform-box: fill-box; transform-origin: 50% 100%; transform: translateY(calc((1 - var(--h)) * 100%)) }
+.scale { font: 11px var(--mono); fill: var(--muted) }
+.clocks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0; border-top: 1px solid var(--line) }
+.clocks div { padding: 10px 16px; display: grid; gap: 3px; min-width: 0 }
+.clocks div + div { border-left: 1px solid var(--line) }
+.clocks b { font: 500 13px/1.3 var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere }
+#clock[data-tone="bad"] { color: var(--bad) } #clock[data-tone="ok"] { color: var(--ok) }
+#decision { margin: 0 16px 16px; padding: 10px 12px; border-left: 4px solid var(--info); background: var(--bg); font-size: 14px; min-height: 44px; overflow-wrap: anywhere }
+#decision[data-tone="ok"] { border-color: var(--ok) } #decision[data-tone="bad"] { border-color: var(--bad) }
+
+/* what-if */
+.group { display: grid; gap: 8px }
+.group + .group { border-top: 1px solid var(--line); padding-top: 12px }
+button.w { font: 500 13.5px/1.2 var(--body); padding: 9px 11px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; text-align: left }
+button.w:hover { border-color: var(--ink) }
+button.w:focus-visible { outline: 2px solid var(--hazard); outline-offset: 1px }
+button.w.attack { border-style: dashed }
+button.w[disabled] { opacity: .5 }
+.group .row button.w { flex: 1 1 140px }
+
+/* log */
+.logpanel { padding: 0 }
+.loghead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px 16px 10px; align-items: baseline }
+.loghead h2 { font: 700 20px/1 var(--display); margin: 0 }
+.tablewrap { overflow-x: auto; max-height: 360px; overflow-y: auto; border-top: 1px solid var(--line) }
+table { border-collapse: collapse; width: 100%; font: 12.5px/1.4 var(--mono); font-variant-numeric: tabular-nums }
+th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 500; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line) }
+td { padding: 6px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+td.n { white-space: nowrap; color: var(--muted) }
+td.detail { min-width: 280px }
+td.sig { color: var(--muted); white-space: nowrap }
+.kind { padding: 2px 6px; border: 1px solid currentColor; font-size: 11px }
+tr[data-kind="transition"] .kind { color: var(--ok) }
+tr[data-kind="refused"] .kind, tr[data-kind="rejected"] .kind { color: var(--bad) }
+tr[data-kind="power"] .kind { color: var(--warn) }
+.empty { color: var(--muted); padding: 16px }
+footer { color: var(--muted); font-size: 13px; max-width: 80ch }
+@media (prefers-reduced-motion: reduce) { #hold { transition: none } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Park Boom barrier simulator <span class="tag">PRD v0.2</span></h1>
+      <p class="lede">Bay B12, one barrier, one gateway, two phones. Every command below is signed with real P-256 keys and checked in the same order the firmware will check it.</p>
+    </div>
+    <div class="chips" aria-label="Link status">
+      <span class="chip" id="chip-power" data-on="true">Barrier power</span>
+      <span class="chip" id="chip-gw" data-on="true">Gateway</span>
+      <span class="chip" id="chip-sig" data-on="true">Phone signal</span>
+    </div>
+  </header>
+
+  <div class="bench">
+    <section class="panel phone" aria-labelledby="phone-h">
+      <p class="eyebrow" id="phone-h">Phone</p>
+      <div class="who" role="radiogroup" aria-label="Who is holding the phone">
+        <label><input type="radio" name="who" id="who-priya" value="priya" checked>Priya · driver</label>
+        <label><input type="radio" name="who" id="who-alan" value="alan">Alan · admin</label>
+      </div>
+      <div class="pass" id="pass" aria-live="polite">Loading pass…</div>
+      <p class="note" id="pass-note"></p>
+      <div class="holdwrap">
+        <button id="hold" type="button" aria-describedby="hold-hint"><span id="ring"></span><span id="hold-label">Hold to lower</span></button>
+        <p class="hint" id="hold-hint">Lowers the post so you can park</p>
+      </div>
+      <div class="row">
+        <button class="w" type="button" data-do="refresh">Renew pass</button>
+        <button class="w admin-only" type="button" data-do="maint_on" hidden>Maintenance on</button>
+        <button class="w admin-only" type="button" data-do="maint_off" hidden>Maintenance off</button>
+        <button class="w admin-only" type="button" data-do="clear" hidden>Clear fault on site</button>
+      </div>
+    </section>
+
+    <section class="panel bay" aria-labelledby="state">
+      <div class="bayhead">
+        <span class="state" id="state" aria-live="polite">Up and locked</span>
+        <span class="code" id="code">UP</span>
+      </div>
+      <svg id="scene" viewBox="0 0 600 300" role="img" aria-label="Side view of bay B12 with the barrier post">
+        <rect class="sky" width="600" height="300"/>
+        <rect class="wall" x="0" y="40" width="600" height="8"/>
+        <text class="scale" x="20" y="30">BAY B12 · LEVEL 1</text>
+        <g id="car" style="display:none">
+          <rect class="carbody" x="150" y="160" width="300" height="60" rx="14"/>
+          <path class="carbody" d="M205 162 L245 118 L370 118 L410 162 Z"/>
+          <path class="glass" d="M222 158 L252 126 L300 126 L300 158 Z M310 126 L362 126 L392 158 L310 158 Z"/>
+          <circle class="wheel" cx="210" cy="226" r="22"/><circle class="wheel" cx="390" cy="226" r="22"/>
+        </g>
+        <svg x="282" y="132" width="36" height="116" overflow="hidden">
+          <g id="post">
+            <rect class="hazard" x="0" y="0" width="36" height="116" rx="4"/>
+            <rect class="black" x="0" y="20" width="36" height="14"/>
+            <rect class="black" x="0" y="54" width="36" height="14"/>
+            <circle class="lamp" cx="18" cy="9" r="4"/>
+          </g>
+        </svg>
+        <rect class="ground" x="0" y="248" width="600" height="52"/>
+        <line class="lines" x1="60" y1="249" x2="60" y2="300"/><line class="lines" x1="540" y1="249" x2="540" y2="300"/>
+        <rect class="black" x="272" y="246" width="56" height="6"/>
+        <text class="scale" x="470" y="138">post up 500 mm</text>
+        <text class="scale" x="470" y="242">ground 0</text>
+      </svg>
+      <div class="clocks">
+        <div><span class="eyebrow">Barrier clock</span><b id="clock">—</b></div>
+        <div><span class="eyebrow">Real time (simulated)</span><b id="wall">—</b></div>
+      </div>
+      <p id="decision" role="status" aria-live="polite">Starting…</p>
+    </section>
+
+    <section class="panel" aria-labelledby="wi-h">
+      <p class="eyebrow" id="wi-h">What if…</p>
+      <div class="group">
+        <button class="w" type="button" data-do="car">Car parks over the post</button>
+        <button class="w" type="button" data-do="obstruction">Something in the bay while rising</button>
+        <button class="w" type="button" data-do="fault">Bay sensor fails</button>
+        <button class="w" type="button" data-do="forced">Post forced down by hand</button>
+      </div>
+      <div class="group">
+        <button class="w" type="button" data-do="power">Cut power</button>
+        <button class="w" type="button" data-do="gateway">Take gateway offline</button>
+        <button class="w" type="button" data-do="signal">Lose phone signal</button>
+      </div>
+      <div class="group">
+        <p class="eyebrow">Admin screen, remote</p>
+        <div class="row">
+          <button class="w" type="button" data-do="rlower">Remote lower</button>
+          <button class="w attack" type="button" data-do="rraise">Try a remote raise</button>
+        </div>
+        <button class="w attack" type="button" data-do="rlate">Remote lower arrives 45 s late</button>
+        <button class="w" type="button" data-do="revoke">Remove Priya's access</button>
+      </div>
+      <div class="group">
+        <p class="eyebrow">Attacks and time</p>
+        <button class="w attack" type="button" data-do="replay">Replay the last phone command</button>
+        <div class="row">
+          <button class="w" type="button" data-do="t5">+5 minutes</button>
+          <button class="w" type="button" data-do="t72">+72 hours</button>
+        </div>
+        <button class="w" type="button" data-do="reset">Start again</button>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel logpanel" aria-labelledby="log-h">
+    <div class="loghead"><h2 id="log-h">Barrier event log</h2><span class="eyebrow" id="count">0 signed events</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Seq</th><th>Barrier time</th><th>Kind</th><th>What happened</th><th>Signature</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>Dashed buttons are attacks or failures the barrier should refuse. Times are simulated; the post takes 2.5 s to travel. Source, tests and the state table live in the parkboom-sim project.</footer>
+</div>
+<script>/*__BUNDLE__*/</script>

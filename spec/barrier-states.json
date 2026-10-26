@@ -1,0 +1,90 @@
+{
+  "name": "Park Boom bay barrier",
+  "version": "1.0.0",
+  "prd": "Park Boom PRD v0.2, section 6",
+  "notes": [
+    "This file is the single source of truth for barrier behaviour. Firmware, the simulator and the app all derive from it.",
+    "Rows are tried in order; the first row whose 'from', 'event' and guards all match wins.",
+    "An event with no matching row is rejected and logged. It never changes state.",
+    "Positions: up, moving_down, moving_up, down, unknown."
+  ],
+  "initial": "UP",
+  "states": {
+    "UP":            { "position": "up",          "label": "Up and locked" },
+    "LOWERING":      { "position": "moving_down", "label": "Lowering" },
+    "DOWN_EMPTY":    { "position": "down",        "label": "Down, bay empty" },
+    "DOWN_NOBODY":   { "position": "down",        "label": "Down, nobody arrived" },
+    "DOWN_OCCUPIED": { "position": "down",        "label": "Car over the post" },
+    "RAISING":       { "position": "moving_up",   "label": "Raising" },
+    "STOPPED":       { "position": "unknown",     "label": "Stopped mid-travel" },
+    "JAMMED":        { "position": "unknown",     "label": "Jammed" },
+    "FAULT":         { "position": "hold",        "label": "Fault" },
+    "MAINTENANCE":   { "position": "hold",        "label": "Maintenance" }
+  },
+  "events": {
+    "CMD_LOWER":        "An authorised lower command (phone on site, or cloud-signed via the gateway)",
+    "CMD_RAISE":        "An authorised raise command. Only accepted from a phone on site in the pilot",
+    "MOTION_DONE":      "The post reached the end of its travel",
+    "OBSTRUCTION":      "Something blocked the post while it was moving",
+    "MOTOR_STALL":      "The motor is driving but the position isn't changing",
+    "POWER_DIP":        "Supply dropped while moving; the post stops where it is",
+    "CAR_ARRIVES":      "Bay sensor reports occupied",
+    "CAR_LEAVES":       "Bay sensor reports empty",
+    "NOBODY_TIMEOUT":   "5 minutes after a lower with no car arriving",
+    "FORCED_DOWN":      "Post pushed down without a command",
+    "SENSOR_FAULT":     "Bay sensor self-test failed",
+    "MAINT_ON":         "Admin switches maintenance on, on site",
+    "MAINT_OFF":        "Admin switches maintenance off, on site",
+    "CLEAR_FAULT":      "Maintenance cleared a fault or jam"
+  },
+  "guards": {
+    "bayEmpty":     "The bay sensor reads empty and the sensor is healthy",
+    "fromPhone":    "The command came from a phone over Bluetooth, on site",
+    "fromGateway":  "The command came through the site gateway"
+  },
+  "actions": {
+    "motorDown":        "Drive the post down",
+    "motorUp":          "Drive the post up",
+    "motorStop":        "Stop the motor",
+    "motorReverseDown": "Stop within 200 ms and drive down",
+    "startNobodyTimer": "Start the 5-minute 'nobody arrived' timer",
+    "cancelNobodyTimer":"Cancel that timer",
+    "emitReminder":     "Event: still down and nobody has parked",
+    "emitTamper":       "Event: forced down without a command",
+    "emitFault":        "Event: fault, admin alerted",
+    "emitObstruction":  "Event: something was in the bay"
+  },
+  "transitions": [
+    { "from": "UP",            "event": "CMD_LOWER",      "to": "LOWERING",      "actions": ["motorDown"] },
+    { "from": "UP",            "event": "FORCED_DOWN",    "to": "DOWN_OCCUPIED", "actions": ["emitTamper"] },
+
+    { "from": "LOWERING",      "event": "MOTION_DONE",    "to": "DOWN_EMPTY",    "actions": ["startNobodyTimer"] },
+    { "from": "LOWERING",      "event": "OBSTRUCTION",    "to": "STOPPED",       "actions": ["motorStop", "emitObstruction"] },
+    { "from": "LOWERING",      "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop"] },
+    { "from": "LOWERING",      "event": "MOTOR_STALL",    "to": "JAMMED",        "actions": ["motorStop", "emitFault"] },
+
+    { "from": "DOWN_EMPTY",    "event": "CAR_ARRIVES",    "to": "DOWN_OCCUPIED", "actions": ["cancelNobodyTimer"] },
+    { "from": "DOWN_EMPTY",    "event": "NOBODY_TIMEOUT", "to": "DOWN_NOBODY",   "actions": ["emitReminder"] },
+    { "from": "DOWN_EMPTY",    "event": "CMD_RAISE",      "to": "RAISING",       "guards": ["fromPhone", "bayEmpty"], "actions": ["cancelNobodyTimer", "motorUp"] },
+
+    { "from": "DOWN_NOBODY",   "event": "CAR_ARRIVES",    "to": "DOWN_OCCUPIED", "actions": [] },
+    { "from": "DOWN_NOBODY",   "event": "CMD_RAISE",      "to": "RAISING",       "guards": ["fromPhone", "bayEmpty"], "actions": ["motorUp"] },
+
+    { "from": "DOWN_OCCUPIED", "event": "CAR_LEAVES",     "to": "DOWN_EMPTY",    "actions": [] },
+
+    { "from": "RAISING",       "event": "MOTION_DONE",    "to": "UP",            "actions": [] },
+    { "from": "RAISING",       "event": "OBSTRUCTION",    "to": "LOWERING",      "actions": ["motorReverseDown", "emitObstruction"] },
+    { "from": "RAISING",       "event": "CAR_ARRIVES",    "to": "LOWERING",      "actions": ["motorReverseDown", "emitObstruction"] },
+    { "from": "RAISING",       "event": "POWER_DIP",      "to": "STOPPED",       "actions": ["motorStop"] },
+    { "from": "RAISING",       "event": "MOTOR_STALL",    "to": "JAMMED",        "actions": ["motorStop", "emitFault"] },
+    { "from": "RAISING",       "event": "SENSOR_FAULT",   "to": "LOWERING",      "actions": ["motorReverseDown", "emitFault"] },
+
+    { "from": "STOPPED",       "event": "CMD_LOWER",      "to": "LOWERING",      "actions": ["motorDown"] },
+
+    { "from": "*",             "event": "SENSOR_FAULT",   "to": "FAULT",         "actions": ["motorStop", "cancelNobodyTimer", "emitFault"] },
+    { "from": "*",             "event": "MAINT_ON",       "to": "MAINTENANCE",   "guards": ["fromPhone"], "actions": ["motorStop", "cancelNobodyTimer"] },
+    { "from": "MAINTENANCE",   "event": "MAINT_OFF",      "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] },
+    { "from": "FAULT",         "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] },
+    { "from": "JAMMED",        "event": "CLEAR_FAULT",    "to": "STOPPED",       "guards": ["fromPhone"], "actions": [] }
+  ]
+}
