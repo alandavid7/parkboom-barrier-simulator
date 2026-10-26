@@ -1,6 +1,6 @@
 # Park Boom barrier simulator
 
-[![CI](https://github.com/alandavid7/parkingmanagementsystem/actions/workflows/ci.yml/badge.svg)](https://github.com/alandavid7/parkingmanagementsystem/actions/workflows/ci.yml)
+[![CI](https://github.com/alandavid7/parkboom-barrier-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/alandavid7/parkboom-barrier-simulator/actions/workflows/ci.yml)
 
 Park Boom is a phone-operated parking barrier. This repo is its safety rules and security protocol, written as runnable TypeScript and tested before any hardware exists: 49 tests, including property-based checks that the post can never rise over a car.
 
