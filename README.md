@@ -1,5 +1,15 @@
 # Park Boom barrier simulator
 
+[![CI](https://github.com/alandavid7/parkingmanagementsystem/actions/workflows/ci.yml/badge.svg)](https://github.com/alandavid7/parkingmanagementsystem/actions/workflows/ci.yml)
+
+Park Boom is a phone-operated parking barrier. This repo is its safety rules and security protocol, written as runnable TypeScript and tested before any hardware exists: 49 tests, including property-based checks that the post can never rise over a car.
+
+![Demo page: the post is down with a car over it. A raise from the phone and a remote raise are both refused, and every decision is in the signed event log.](docs/demo.png)
+
+To try it, download [`dist/park-boom-simulator.html`](dist/park-boom-simulator.html) and open it in any browser. It's one file and works offline.
+
+## What it is
+
 A software stand-in for one Park Boom barrier, its gateway, the cloud and two phones. It runs the rules and the security protocol from PRD v0.2 with real P-256 signatures, so both can be tested before any hardware exists.
 
 It isn't firmware and it doesn't talk to a real barrier. It's the reference the firmware, the iOS app and the backend will be checked against.
